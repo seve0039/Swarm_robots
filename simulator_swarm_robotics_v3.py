@@ -39,7 +39,7 @@ RANDOM_SEED = 42
 np.random.seed(RANDOM_SEED)
 
 # Parameters
-NUM_ROBOTS = 2
+NUM_ROBOTS = 50
 ROBOT_RADIUS = 10
 
 NUM_PROX_SENSORS = 6
@@ -59,7 +59,7 @@ ORIENTATION_NOISE_STD = 0 # noise in IMU readings of the robot’s own orientati
 
 # noise in the motion model (simulates actuation/motor errors)
 MOTION_NOISE_STD = 0 # Try 0.5   # Positional noise in dx/dy (pixels)
-HEADING_NOISE_STD = 0 # Try 0.01 # Rotational noise in heading (radians)
+HEADING_NOISE_STD = 0.01 # Try 0.01 # Rotational noise in heading (radians)
 
 def rotate_vector(vec, angle):
     c, s = np.cos(angle), np.sin(angle)
@@ -148,7 +148,7 @@ class Robot:
         self._heading = (self._heading + delta_heading) % (2 * np.pi)  # keep in [0, 2π)
 
         # Update position
-        dx = self._linear_velocity * np.cos(mid_heading) * dt
+        dx = self._linear_velocity * np.cos(mid_heading) * dt 
         dy = self._linear_velocity * np.sin(mid_heading) * dt
         dx += np.random.normal(0, MOTION_NOISE_STD)
         dy += np.random.normal(0, MOTION_NOISE_STD)
@@ -296,8 +296,6 @@ class Robot:
             - self.prox_readings: proximity sensor data
             - self.light_intensity: light at current location
             - self.rab_signals: list of received messages from other robots
-            - self.orientation: the robot's own heading, as measured by its IMU
-            (refer to the workplans and exercise descriptions for what you are or are not allowed to use)
 
             Use only self.set_rotation_and_speed(...) to move the robot.
 
@@ -306,6 +304,60 @@ class Robot:
             """
         # Example: move forward
         self.set_rotation_and_speed(0, MAX_SPEED * 0.5)
+        # print ("prox_readings: ", self.prox_readings)
+        # distances = []
+        sensor_index = 0
+        for i in self.prox_readings:
+            # prio_sensor = self.prox_readings.index(max(i["distance"]))
+            # i["distance"]
+            
+            sensor_index = min(range(len(self.prox_readings)), key=lambda i: self.prox_readings[i]["distance"])
+        # print(sensor_index)  
+        sensor = self.prox_readings[sensor_index]
+        if sensor_index > 2:
+            sensor = self.prox_readings[sensor_index]
+            if sensor["type"] == "robot" and sensor["distance"] <= 40:
+                self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+            if sensor["type"] == "robot" and sensor["distance"] > 40:
+                self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+            if sensor["type"] == "wall":
+                self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+
+        if sensor_index <= 2:
+            sensor = self.prox_readings[sensor_index]
+            if sensor["type"]== "robot" and sensor["distance"] <= 40:
+                self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+            if sensor["type"] == "robot" and sensor["distance"] > 40:
+                self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+            if sensor["type"] == "wall":
+                self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+
+
+        # for i in self.prox_readings[:3]:
+
+        #     # prio_sensor = self.prox_readings.index(max(i["distance"]))
+
+            
+        #     if i["type"] == "robot" and i["distance"] < 50:
+        #         self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+        #     if i["type"] == "robot" and i["distance"] > 50:
+        #         self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+        #     if i["type"] == "wall":
+        #         self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+
+        # for i in self.prox_readings[3:6]:
+        #     if i["type"] == "robot" and i["distance"] < 50:
+        #         self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+        #     if i["type"] == "robot" and i["distance"] > 50:
+        #         self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+        #     if i["type"] == "wall":
+        #         self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+           
+
+
+        # sensorData = self.read_sensors()
+        # if sensorData :
+            
 
     def draw(self, screen):
         # --- IR proximity sensors ---
@@ -459,6 +511,7 @@ def main():
             # Physics (motion) is simulated every sim step
             for robot in robots:
                 robot.move(dt)
+                
 
             metrics = compute_metrics()
             log_metrics(frame_count, total_time, metrics)
