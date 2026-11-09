@@ -1,5 +1,6 @@
 import pygame
 import numpy as np
+from pathlib import Path
 
 # Pygame setup
 WIDTH, HEIGHT = 800, 600
@@ -48,7 +49,7 @@ NUM_RAB_SENSORS = 12
 PROX_SENSOR_RANGE = 60  # pixels
 RAB_RANGE = 150  # pixels
 
-MAX_SPEED = 50
+MAX_SPEED = 100
 MAX_TURN = 3  # radians/sec - a real robot like the e-puck or TurtleBot typically turns at 90–180 deg/sec (≈ 1.5–3.1 rad/sec)
 
 # sensor noise and dropout
@@ -99,8 +100,8 @@ OBSTACLES = [
 ]
 
 LIGHT_SOURCES = [
-    #LightSource(pos=(100, 100), intensity=1.0, core_radius=50, decay_radius=300),
-    #LightSource(pos=(700, 500), intensity=0.9, core_radius=10, decay_radius=100)
+    LightSource(pos=(100, 100), intensity=1.0, core_radius=50, decay_radius=300),
+    LightSource(pos=(700, 500), intensity=0.9, core_radius=10, decay_radius=100)
 ]
 
 
@@ -303,7 +304,8 @@ class Robot:
             DO NOT modify move()
             """
         # Example: move forward
-        self.set_rotation_and_speed(0, MAX_SPEED * 0.5)
+        intensity = 0.1 + 1 - self.light_intensity
+        self.set_rotation_and_speed(0, MAX_SPEED * intensity )
         # print ("prox_readings: ", self.prox_readings)
         # distances = []
         sensor_index = 0
@@ -317,20 +319,20 @@ class Robot:
         if sensor_index > 2:
             sensor = self.prox_readings[sensor_index]
             if sensor["type"] == "robot" and sensor["distance"] <= 40:
-                self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+                self.set_rotation_and_speed(-10, MAX_SPEED*intensity)
             if sensor["type"] == "robot" and sensor["distance"] > 40:
-                self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+                self.set_rotation_and_speed(10, MAX_SPEED*intensity)
             if sensor["type"] == "wall":
-                self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+                self.set_rotation_and_speed(-10, MAX_SPEED*intensity)
 
         if sensor_index <= 2:
             sensor = self.prox_readings[sensor_index]
             if sensor["type"]== "robot" and sensor["distance"] <= 40:
-                self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+                self.set_rotation_and_speed(10, MAX_SPEED * intensity)
             if sensor["type"] == "robot" and sensor["distance"] > 40:
-                self.set_rotation_and_speed(-5, MAX_SPEED * 0.5)
+                self.set_rotation_and_speed(-10, MAX_SPEED*intensity)
             if sensor["type"] == "wall":
-                self.set_rotation_and_speed(5, MAX_SPEED * 0.5)
+                self.set_rotation_and_speed(10, MAX_SPEED * intensity)
 
 
         # for i in self.prox_readings[:3]:
@@ -436,16 +438,29 @@ def draw_headless_banner(screen, paused, total_time):
         y += surf.get_height() + 15
     pygame.display.flip()
 
+global file_path
+file_path = ""
+
 def logging_init(): #initialize your log file
+    global file_path 
+    file_path = Path("runs/1.txt")
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
     pass
 
 def log_metrics(frame_count, total_time, metrics): # write to your log file
+    file_path.write_text("", encoding="utf-8")
+
     pass
 
 def logging_close(): # close your log file
     pass
 
 def compute_metrics(): # pass as many arguments as you need and compute relevant metrics to be logged for performance analysis
+    # distance
+    # object type 
+    # average light intensity
+
     return []
 
 
@@ -511,7 +526,8 @@ def main():
             # Physics (motion) is simulated every sim step
             for robot in robots:
                 robot.move(dt)
-                
+            
+            
 
             metrics = compute_metrics()
             log_metrics(frame_count, total_time, metrics)
