@@ -287,8 +287,45 @@ class Robot:
 
     def controller_init(self):
         pass
+    def wall_avoidance(self, margin=150, strength=2.0):
 
-    def robot_controller(self):
+        x, y = self._pos
+
+        velocity = np.array([
+            np.cos(self._heading),
+            np.sin(self._heading)
+        ]) * self._linear_velocity
+
+        avoidance = np.zeros(2)
+
+        if x < margin:
+            avoidance[0] += (margin - x) / margin
+
+        if x > WIDTH - margin:
+            avoidance[0] -= (x - (WIDTH - margin)) / margin
+
+        if y < margin:
+            avoidance[1] += (margin - y) / margin
+
+        if y > HEIGHT - margin:
+            avoidance[1] -= (y - (HEIGHT - margin)) / margin
+
+        # Only avoid walls when inside the margin
+        if np.linalg.norm(avoidance) == 0:
+            return False, 0
+
+        desired_velocity = velocity + avoidance * MAX_SPEED * strength
+
+        desired_heading = np.arctan2(
+            desired_velocity[1],
+            desired_velocity[0]
+        )
+
+        delta_bearing = self.compute_angle_diff(desired_heading)
+
+        return True, delta_bearing
+
+    def robot_controller(self, robots):
         """
             Implement your control logic here.
             This function is called once every control cycle (every CONTROL_DT simulated seconds),
@@ -303,10 +340,13 @@ class Robot:
             DO NOT modify robot._linear_velocity or robot._angular_velocity directly.
             DO NOT modify move()
             """
+
+
+
         # Example: move forward
-        intensity = 0.1 + 1 - self.light_intensity
-        self.set_rotation_and_speed(0, MAX_SPEED * intensity )
-        # print ("prox_readings: ", self.prox_readings)
+        intensity = 1 #0.1 + 1 - self.light_intensity
+        self.set_rotation_and_speed(0, MAX_SPEED * intensity)
+        #print ("prox_readings: ", self.prox_readings)
         # distances = []
         sensor_index = 0
         for i in self.prox_readings:
@@ -316,23 +356,69 @@ class Robot:
             sensor_index = min(range(len(self.prox_readings)), key=lambda i: self.prox_readings[i]["distance"])
         # print(sensor_index)  
         sensor = self.prox_readings[sensor_index]
-        if sensor_index > 2:
-            sensor = self.prox_readings[sensor_index]
-            if sensor["type"] == "robot" and sensor["distance"] <= 40:
-                self.set_rotation_and_speed(-10, MAX_SPEED*intensity)
-            if sensor["type"] == "robot" and sensor["distance"] > 40:
-                self.set_rotation_and_speed(10, MAX_SPEED*intensity)
-            if sensor["type"] == "wall":
-                self.set_rotation_and_speed(-10, MAX_SPEED*intensity)
 
-        if sensor_index <= 2:
-            sensor = self.prox_readings[sensor_index]
-            if sensor["type"]== "robot" and sensor["distance"] <= 40:
-                self.set_rotation_and_speed(10, MAX_SPEED * intensity)
-            if sensor["type"] == "robot" and sensor["distance"] > 40:
-                self.set_rotation_and_speed(-10, MAX_SPEED*intensity)
-            if sensor["type"] == "wall":
-                self.set_rotation_and_speed(10, MAX_SPEED * intensity)
+        # for robot in robots:
+        #     print("ang velocity ", robot._angular_velocity)
+
+        # x, y = self._pos
+        # turnfactor = 30
+        # if x < ARENA_BOUNDS["left"] + 200:
+        #     self.set_rotation_and_speed(0 + turnfactor, MAX_SPEED * intensity)
+            
+        # if x > ARENA_BOUNDS["right"] - 200:
+        #     self.set_rotation_and_speed(0 - turnfactor, MAX_SPEED * intensity)
+
+        # if y > ARENA_BOUNDS["bottom"] - 200:
+        #     self.set_rotation_and_speed(0 - turnfactor, MAX_SPEED * intensity)
+
+        # if y < ARENA_BOUNDS["top"] + 200:
+        #     self.set_rotation_and_speed(0 + turnfactor, MAX_SPEED * intensity)
+
+        intensity = 1
+
+        # First priority: wall avoidance
+        avoiding_wall, delta_bearing = self.wall_avoidance(
+            margin=150,
+            strength=2.0
+        )
+
+        if avoiding_wall:
+            self.set_rotation_and_speed(
+                delta_bearing,
+                MAX_SPEED * intensity
+            )
+
+        else:
+            # Second priority: neighbour alignment
+
+            # for other in robots:
+            #     rel_vec = other._pos - self._pos
+            #     distance = np.linalg.norm(rel_vec) - other._radius
+
+            #     if distance < 60:
+            #         self.separation(robots)
+            #     else:
+            #         self.get_neighbor_heading(robots)
+
+            if sensor_index > 2:
+                sensor = self.prox_readings[sensor_index]
+                if sensor["type"] == "robot" and sensor["distance"] <= 40:
+                    self.set_rotation_and_speed(-10, MAX_SPEED*intensity)
+                # if sensor["type"] == "wall":
+                #     self.set_rotation_and_speed(-10, MAX_SPEED*intensity)
+                else:
+                    self.get_neighbor_heading(robots)
+            if sensor_index <= 2:
+                sensor = self.prox_readings[sensor_index]
+                if sensor["type"]== "robot" and sensor["distance"] <= 40:
+                    self.set_rotation_and_speed(10, MAX_SPEED * intensity)
+                # if sensor["type"] == "wall":
+                #     self.set_rotation_and_speed(10, MAX_SPEED * intensity)
+                else:
+                    self.get_neighbor_heading(robots)
+
+        
+ 
 
 
         # for i in self.prox_readings[:3]:
@@ -359,7 +445,81 @@ class Robot:
 
         # sensorData = self.read_sensors()
         # if sensorData :
+    def separation(self, robots):
+        x, y = self._pos
+
+        close_dx = 0
+        close_dy = 0
+
+        for robot in robots:
+            if robot.id == self.id:
+                continue
+
+
+            other_x, other_y = robot._pos
+
+            close_dx += x - other_x
+            close_dy += y - other_y
+                
+        
+        vx = self._linear_velocity * np.cos(self._heading)
+        vy = self._linear_velocity * np.sin(self._heading)
+
+        avoidfactor = 0.05
+
+        vx += close_dx * avoidfactor
+        vy += close_dy * avoidfactor
+
+                # Calculate new speed
+        new_speed = np.sqrt(vx**2 + vy**2)
+
+        # Calculate desired heading
+        desired_heading = np.arctan2(vy, vx)
+
+        # Calculate relative turning angle
+        delta_bearing = self.compute_angle_diff(desired_heading)
+
+        # Apply new velocity
+        self.set_rotation_and_speed(
+            delta_bearing,
+            min(new_speed, MAX_SPEED)
+        )
+
+    def get_neighbor_heading(self, robots):
+        neighbor_robots = []
+
+        for other in robots:
+            if other.id == self.id:
+                continue
             
+            rel_vec = other._pos - self._pos
+            distance = max(0,np.linalg.norm(rel_vec) - other._radius)
+            if distance < 60:
+                neighbor_robots.append(other)
+            
+            # print(ids)
+        if len(neighbor_robots) == 0:
+            return
+        # robLinearVel = 0
+        # robAngVel = 0
+        sum_heading = 0
+
+        for robot in neighbor_robots:
+            sum_heading += self.get_relative_heading(robot._heading) 
+        
+        average_heading = sum_heading/len(neighbor_robots)
+
+        self.set_rotation_and_speed(average_heading, MAX_SPEED)
+        
+
+
+
+            
+
+
+            
+
+
 
     def draw(self, screen):
         # --- IR proximity sensors ---
@@ -521,7 +681,8 @@ def main():
                 robot.read_sensors(robots, OBSTACLES, ARENA_BOUNDS)
 
             for robot in active:
-                robot.robot_controller()
+                robot.robot_controller(robots)
+                
 
             # Physics (motion) is simulated every sim step
             for robot in robots:
