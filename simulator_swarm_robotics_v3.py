@@ -354,73 +354,85 @@ class Robot:
         ]) * self._linear_velocity
 
         # First priority: wall avoidance
-        avoiding_wall, delta_bearing = self.wall_avoidance(
+        avoiding_wall, wall_delta = self.wall_avoidance(
             velocity,
             margin=100,
             strength=2.0,
         )
+        avoiding_obstacle, obstacle_delta = self.obstacle_avoidance(
+            velocity,
+            strength=5.0
+        )
+        if avoiding_obstacle:
+            self.set_rotation_and_speed(
+                obstacle_delta,
+                MAX_SPEED * intensity
+            )
+            return
 
         if avoiding_wall:
             self.set_rotation_and_speed(
-                delta_bearing,
+                wall_delta,
                 MAX_SPEED * intensity
             )
-        else:
-            # Second priority: neighbour alignment
-            vx = self._linear_velocity * np.cos(self._heading)
-            vy = self._linear_velocity * np.sin(self._heading)
+            return
 
-            desired_heading = np.arctan2(vy, vx)
-            new_delta_bearing = self.compute_angle_diff(desired_heading)
-            new_speed = np.sqrt(vx**2 + vy**2)
 
-            coh_ali_neighbor_robots = []
-            sep_neighbor_robots = []
-            
-            for other in robots:
-                if other.id == self.id:
-                    continue
-                
-                rel_vec = other._pos - self._pos
-                distance = max(0,np.linalg.norm(rel_vec) - other._radius)
-                
-                if distance < 5000:
-                    coh_ali_neighbor_robots.append(other)
-                if distance < 50:
-                    sep_neighbor_robots.append(other)
-                
-            if sensor_index > 3:
-                sensor = self.prox_readings[sensor_index]
-                if sensor["type"] == "obstacle":
-                    print("hello1")
-                    self.set_rotation_and_speed(-5, MAX_SPEED) # MAX_SPEED*intensity
-                    
-            if sensor_index <= 1:
-                sensor = self.prox_readings[sensor_index]
-                if sensor["type"] == "obstacle":
-                    print("hello2")
-                    self.set_rotation_and_speed(5, MAX_SPEED) # MAX_SPEED*intensity
-                    
-            if len(coh_ali_neighbor_robots) < 1 or len(sep_neighbor_robots) < 1:
-                return
-            
-            ali_delta_bearing = self.alignment(coh_ali_neighbor_robots)
-            coh_delta_bearing = self.cohesion(coh_ali_neighbor_robots)
-            sep_delta_bearing = self.separation(vx, vy, neighbor_robots=sep_neighbor_robots)
+        # Second priority: neighbour alignment
+        vx = self._linear_velocity * np.cos(self._heading)
+        vy = self._linear_velocity * np.sin(self._heading)
+
+        desired_heading = np.arctan2(vy, vx)
+        new_delta_bearing = self.compute_angle_diff(desired_heading)
+        new_speed = np.sqrt(vx**2 + vy**2)
+
+        coh_ali_neighbor_robots = []
+        sep_neighbor_robots = []
         
-            vectors = [
-                ali_delta_bearing,
-                sep_delta_bearing,
-                coh_delta_bearing
-            ]
-
-            average_delta_bearing = np.arctan2(
-                np.mean(np.sin(vectors)),
-                np.mean(np.cos(vectors))
-            )
+        for other in robots:
+            if other.id == self.id:
+                continue
             
-            # print(ali_delta_bearing, sep_delta_bearing, coh_delta_bearing)
-            self.set_rotation_and_speed(average_delta_bearing, new_speed * intensity)
+            rel_vec = other._pos - self._pos
+            distance = max(0,np.linalg.norm(rel_vec) - other._radius)
+            
+            if distance < 5000:
+                coh_ali_neighbor_robots.append(other)
+            if distance < 50:
+                sep_neighbor_robots.append(other)
+            
+        # if sensor_index > 3:
+        #     sensor = self.prox_readings[sensor_index]
+        #     if sensor["type"] == "obstacle":
+        #         print("hello1")
+        #         self.set_rotation_and_speed(-5, MAX_SPEED) # MAX_SPEED*intensity
+                
+        # if sensor_index <= 1:
+        #     sensor = self.prox_readings[sensor_index]
+        #     if sensor["type"] == "obstacle":
+        #         print("hello2")
+        #         self.set_rotation_and_speed(5, MAX_SPEED) # MAX_SPEED*intensity
+                
+        if len(coh_ali_neighbor_robots) < 1 or len(sep_neighbor_robots) < 1:
+            return
+        
+        ali_delta_bearing = self.alignment(coh_ali_neighbor_robots)
+        coh_delta_bearing = self.cohesion(coh_ali_neighbor_robots)
+        sep_delta_bearing = self.separation(vx, vy, neighbor_robots=sep_neighbor_robots)
+    
+        vectors = [
+            ali_delta_bearing,
+            sep_delta_bearing,
+            coh_delta_bearing
+        ]
+
+        average_delta_bearing = np.arctan2(
+            np.mean(np.sin(vectors)),
+            np.mean(np.cos(vectors))
+        )
+        
+        # print(ali_delta_bearing, sep_delta_bearing, coh_delta_bearing)
+        self.set_rotation_and_speed(average_delta_bearing, new_speed * intensity)
 
             
                     
