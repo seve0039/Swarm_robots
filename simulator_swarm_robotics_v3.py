@@ -1,6 +1,7 @@
 import pygame
 import numpy as np
 from pathlib import Path
+from sklearn.cluster import DBSCAN
 
 # Pygame setup
 WIDTH, HEIGHT = 800*2, 600*1.5
@@ -40,7 +41,7 @@ ARENA_BOUNDS = {
 }
 
 # Random seed: set once when the program starts (used for initial positions, noise, etc.)
-RANDOM_SEED = 1
+RANDOM_SEED = 5
 np.random.seed(RANDOM_SEED)
 
 # Parameters
@@ -99,8 +100,8 @@ class Obstacle:
         self.type = "obstacle"  # used in sensing
 
 OBSTACLES = [
-    Obstacle(pos=(200, 150), radius=20),
-    Obstacle(pos=(600, 120), radius=30),
+    # Obstacle(pos=(200, 150), radius=20),
+    # Obstacle(pos=(600, 120), radius=30),
 ]
 
 LIGHT_SOURCES = [
@@ -361,7 +362,7 @@ class Robot:
         )
         avoiding_obstacle, obstacle_delta = self.obstacle_avoidance(
             velocity,
-            strength=5.0
+            strength=1.0
         )
         if avoiding_obstacle:
             self.set_rotation_and_speed(
@@ -376,7 +377,6 @@ class Robot:
                 MAX_SPEED * intensity
             )
             return
-
 
         # Second priority: neighbour alignment
         vx = self._linear_velocity * np.cos(self._heading)
@@ -564,13 +564,13 @@ class Robot:
                 continue
 
             distance = sensor["distance"]
-
+            margin = 200
             # Avoid obstacles within sensor range
-            if distance >= PROX_SENSOR_RANGE:
+            if distance >= margin:
                 continue
 
             # Stronger avoidance when closer to obstacle
-            force = (PROX_SENSOR_RANGE - distance) / PROX_SENSOR_RANGE
+            force = (margin - distance) / margin
 
             # Direction of the sensor in global coordinates
             angle = self._heading + self.prox_angles[i]
@@ -697,20 +697,66 @@ def logging_init(): #initialize your log file
 
     pass
 
-def log_metrics(frame_count, total_time, metrics): # write to your log file
-    file_path.write_text("", encoding="utf-8")
-
-    pass
+def log_metrics(frame_count, total_time, metrics):
+    with open(file_path, "a", encoding="utf-8") as f:
+        f.write(f"{frame_count},{total_time},{metrics}\n")
 
 def logging_close(): # close your log file
     pass
 
-def compute_metrics(): # pass as many arguments as you need and compute relevant metrics to be logged for performance analysis
+def compute_flock_metrics(robots, eps=150, min_samples=3):
+
+    positions = np.array([r._pos for r in robots])
+
+    # Run DBSCAN
+    clustering = DBSCAN(
+        eps=eps,
+        min_samples=min_samples
+    ).fit(positions)
+
+    labels = clustering.labels_
+
+    # -1 represents noise / isolated robots
+    unique_labels = set(labels)
+
+    flock_labels = unique_labels - {-1}
+
+    # Count flocks
+    number_of_flocks = len(flock_labels)
+
+    # Count robots in each flock
+    flock_sizes = [
+        np.sum(labels == label)
+        for label in flock_labels
+    ]
+
+    # Number of isolated robots
+    isolated_robots = np.sum(labels == -1)
+
+    # Largest flock
+    largest_flock = max(flock_sizes) if flock_sizes else 0
+
+    # Percentage of robots in identified flocks
+    flocked_robots = len(robots) - isolated_robots
+
+    flock_percentage = flocked_robots / len(robots) * 100
+
+    return {
+        "number_of_flocks": number_of_flocks,
+        "flock_sizes": flock_sizes,
+        "largest_flock": largest_flock,
+        "isolated_robots": isolated_robots,
+        "flock_percentage": flock_percentage
+    }
+
+def compute_metrics(robots): # pass as many arguments as you need and compute relevant metrics to be logged for performance analysis
+    flock_metrics = compute_flock_metrics(robots)
+
     # distance
     # object type 
     # average light intensity
 
-    return []
+    return flock_metrics
 
 
 def main():
@@ -779,7 +825,7 @@ def main():
             
             
 
-            metrics = compute_metrics()
+            metrics = compute_metrics(robots)
             log_metrics(frame_count, total_time, metrics)
 
             frame_count += 1
